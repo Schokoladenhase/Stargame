@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sternen-Legespiel</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* Layout: eine zentrierte Spielspalte – das Brett als Held, Werkzeuge darunter, die Ablage wie eine Schublade mit losen Teilen */
+:root {
+  --bg: #eceefa;
+  --surface: #ffffff;
+  --ink: #1c1f4a;
+  --muted: #5a5e8e;
+  --line: #d4d7ef;
+  --rim: #2b3080;
+  --on-rim: #ffffff;
+  --cavity: #1b1f5c;
+  --slot: #5b62b8;
+  --focus: #ff9124;
+  --scrim: rgba(18, 20, 60, .55);
+  --lvl-starter: #78bf24;
+  --lvl-junior: #f1ae00;
+  --lvl-expert: #e4402a;
+  --lvl-wizard: #2f7fe0;
+  --f-display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --f-body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1030; --surface: #181b46; --ink: #eef0ff; --muted: #a6aadb; --line: #2c3072;
+    --rim: #313795; --on-rim: #ffffff; --cavity: #161a4f; --slot: #5d64bc; --scrim: rgba(4, 5, 20, .7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1030; --surface: #181b46; --ink: #eef0ff; --muted: #a6aadb; --line: #2c3072;
+  --rim: #313795; --on-rim: #ffffff; --cavity: #161a4f; --slot: #5d64bc; --scrim: rgba(4, 5, 20, .7);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { min-height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 16px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+main { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+
+header { display: flex; flex-direction: column; gap: 4px; }
+h1 {
+  font-family: var(--f-display); font-weight: 600; font-size: clamp(1.7rem, 5vw, 2.3rem);
+  line-height: 1.1; margin: 0; text-wrap: balance; display: flex; align-items: center; gap: .45em;
+}
+h1 svg { width: 1.1em; height: 1.1em; flex: none; }
+.lede { margin: 0; color: var(--muted); max-width: 60ch; }
+
+.levels { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.lvl {
+  font: 600 1rem/1.2 var(--f-display); color: var(--ink);
+  background: var(--surface); border: 2px solid var(--line); border-radius: 14px;
+  padding: 10px 8px 9px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  position: relative; overflow: hidden;
+}
+.lvl::before { content: ""; position: absolute; inset: 0 0 auto; height: 5px; background: var(--c); }
+.lvl small { font: 600 .72rem/1.2 var(--f-body); color: var(--muted); letter-spacing: .02em; }
+.lvl[aria-pressed="true"] { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+.lvl[aria-pressed="true"] small { color: var(--ink); }
+
+.status {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px;
+  font-size: .95rem; color: var(--muted);
+}
+.status strong { color: var(--ink); font-weight: 700; }
+.status .meta { display: flex; gap: 16px; font-variant-numeric: tabular-nums; }
+
+.board-wrap { position: relative; }
+#board { display: block; width: 100%; height: auto; touch-action: none; user-select: none; -webkit-user-select: none; }
+#board .piece:not(.fixed) { cursor: grab; }
+.piece.sel { filter: drop-shadow(0 0 5px #ffffff) drop-shadow(0 0 2px #ffffff); }
+.slot { fill: none; stroke: var(--slot); stroke-width: 1.6; }
+.rim { fill: var(--rim); }
+.cavity { fill: var(--cavity); }
+.won .piece > g { animation: twinkle .9s ease-in-out both; transform-box: fill-box; transform-origin: center; }
+@keyframes twinkle { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.16) rotate(30deg); } }
+@media (prefers-reduced-motion: reduce) { .won .piece > g { animation: none; } }
+
+.tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn {
+  font: 600 .98rem/1 var(--f-display); color: var(--ink); background: var(--surface);
+  border: 2px solid var(--line); border-radius: 12px; padding: 10px 14px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { border-color: var(--slot); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--rim); border-color: var(--rim); color: var(--on-rim); margin-left: auto; }
+.btn svg { width: 18px; height: 18px; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.tray-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.tray-head h2 { font: 600 1.05rem/1.2 var(--f-display); margin: 0; }
+.tray-head span { font-size: .85rem; color: var(--muted); }
+#tray {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 14px;
+  min-height: 120px; padding: 14px; border-radius: 18px;
+  background: var(--surface); border: 2px dashed var(--line);
+}
+#tray:empty::after { content: "Alle Teile liegen auf dem Brett."; color: var(--muted); }
+.tray-item { border-radius: 12px; padding: 4px; cursor: grab; touch-action: none; line-height: 0; }
+.tray-item.sel { background: color-mix(in srgb, var(--slot) 22%, transparent); }
+.tray-item.lifted { opacity: .2; }
+.tray-item svg { display: block; overflow: visible; }
+
+.help { font-size: .88rem; color: var(--muted); margin: 0; display: grid; gap: 4px; }
+.help kbd {
+  font: 700 .8rem/1 var(--f-body); border: 1.5px solid var(--line); border-bottom-width: 3px;
+  border-radius: 6px; padding: 2px 6px; background: var(--surface); color: var(--ink);
+}
+
+#float { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 20; overflow: visible; }
+#float g { filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .35)); }
+
+.win {
+  position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: var(--scrim);
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+}
+.win-card {
+  background: var(--surface); border-radius: 22px; padding: 26px 24px 22px; max-width: 360px; width: 100%;
+  text-align: center; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 50px rgba(0, 0, 0, .3);
+}
+.win-card h2 { font: 600 2rem/1.1 var(--f-display); margin: 0; }
+.win-card p { margin: 0; color: var(--muted); }
+.win-card .row { display: flex; gap: 8px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+.win-card .btn.primary { margin-left: 0; }
+
+@media (max-width: 520px) {
+  .lvl small { display: none; }
+  .btn { padding: 9px 11px; font-size: .92rem; }
+  .btn .lbl-long { display: none; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>
+      <svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="M0-11L3.2-5.5 9.5-5.5 6.4 0 9.5 5.5 3.2 5.5 0 11-3.2 5.5-9.5 5.5-6.4 0-9.5-5.5-3.2-5.5Z" fill="#ffd22e" stroke="#c79a00" stroke-width="1.4"/><path d="M0-6L1.8-3.1 5.2-3.1 3.5 0 5.2 3.1 1.8 3.1 0 6-1.8 3.1-5.2 3.1-3.5 0-5.2-3.1-1.8-3.1Z" fill="#fff"/></svg>
+      Sternen-Legespiel
+    </h1>
+    <p class="lede">Lege alle Sternteile so in die Form, dass jeder der 26 Plätze belegt ist. Vorgegebene Teile und farbige Einzelsterne dürfen nicht verändert werden.</p>
+  </header>
+
+  <nav class="levels" aria-label="Schwierigkeit">
+    <button class="lvl" id="lvl-starter" data-level="starter" style="--c: var(--lvl-starter)">Starter<small>4 Teile liegen</small></button>
+    <button class="lvl" id="lvl-junior" data-level="junior" style="--c: var(--lvl-junior)">Junior<small>3 Teile liegen</small></button>
+    <button class="lvl" id="lvl-expert" data-level="expert" style="--c: var(--lvl-expert)">Expert<small>2 Teile liegen</small></button>
+    <button class="lvl" id="lvl-wizard" data-level="wizard" style="--c: var(--lvl-wizard)">Wizard<small>nur Einzelsterne</small></button>
+  </nav>
+
+  <div class="status">
+    <span id="task"><strong>Starter</strong> · 3 Teile fehlen</span>
+    <span class="meta"><span id="timer">0:00</span><span id="solved">Gelöst: 0</span></span>
+  </div>
+
+  <div class="board-wrap">
+    <svg id="board" role="img" aria-label="Spielbrett mit 26 Sternplätzen"></svg>
+  </div>
+
+  <div class="tools">
+    <button class="btn" id="btn-rot" title="Drehen (R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>Drehen</button>
+    <button class="btn" id="btn-hint">Tipp</button>
+    <button class="btn" id="btn-reset">Zurücklegen</button>
+    <button class="btn" id="btn-solve">Lösung</button>
+    <button class="btn primary" id="btn-new">Neues Rätsel</button>
+  </div>
+
+  <section>
+    <div class="tray-head"><h2>Ablage</h2><span id="tray-count"></span></div>
+    <div id="tray" aria-label="Teile, die noch gelegt werden müssen"></div>
+  </section>
+
+  <div class="help">
+    <p style="margin:0"><b>Ziehen</b> legt ein Teil aufs Brett oder zurück in die Ablage. <b>Antippen</b> wählt ein Teil aus, nochmal antippen dreht es.</p>
+    <p style="margin:0">Tastatur: <kbd>R</kbd> dreht das Teil, auch während des Ziehens. Mausrad dreht beim Ziehen. Teile lassen sich wie im echten Spiel nur drehen, nicht umdrehen.</p>
+  </div>
+</main>
+
+<svg id="float" aria-hidden="true"></svg>
+
+<div class="win" id="win" hidden>
+  <div class="win-card" role="dialog" aria-modal="true" aria-labelledby="win-title">
+    <h2 id="win-title">Geschafft!</h2>
+    <p id="win-text"></p>
+    <div class="row">
+      <button class="btn" id="win-close">Ansehen</button>
+      <button class="btn primary" id="win-next">Nächstes Rätsel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const NS = "http://www.w3.org/2000/svg";
+  const S = 60, H = Math.sqrt(3) / 2, PAD = 50, R = S * 0.53;
+  const W = 6 * S + 2 * PAD, HT = 3 * S * H + 2 * PAD;
+
+  // Die sieben Teile, so abgelesen wie im Foto der gelösten Form (axiale Hex-Koordinaten).
+  const PIECES = [
+    { id: "purple", name: "Lila",   color: "#b65ce0", edge: "#7c2fa6", cells: [[0,0],[1,0],[2,0]] },
+    { id: "green",  name: "Grün",   color: "#8fd136", edge: "#4f8a0c", cells: [[3,0],[4,0],[5,0],[2,1]] },
+    { id: "yellow", name: "Gelb",   color: "#ffd22e", edge: "#c08f00", cells: [[6,0],[5,1],[4,2],[5,2]] },
+    { id: "pink",   name: "Rosa",   color: "#ff86c8", edge: "#cf4b94", cells: [[0,1],[1,1],[-1,2],[-1,3]] },
+    { id: "red",    name: "Rot",    color: "#f2412b", edge: "#a91d0c", cells: [[0,2],[1,2],[0,3],[1,3]] },
+    { id: "orange", name: "Orange", color: "#ff9124", edge: "#c45c00", cells: [[3,1],[4,1],[2,2]] },
+    { id: "blue",   name: "Blau",   color: "#23b7ea", edge: "#0a78a6", cells: [[3,2],[2,3],[3,3],[4,3]] },
+  ];
+  const NP = PIECES.length;
+
+  const LEVELS = {
+    starter: { name: "Starter", given: 4 },
+    junior:  { name: "Junior",  given: 3 },
+    expert:  { name: "Expert",  given: 2 },
+    wizard:  { name: "Wizard",  stars: 3 },
+  };
+
+  // ---------- Brett-Geometrie ----------
+  // 4 Reihen mit 7/6/7/6 Plätzen, ungerade Reihen um einen halben Platz nach rechts versetzt.
+  const CELLS = [];
+  for (let r = 0; r < 4; r++) {
+    const n = r % 2 ? 6 : 7;
+    for (let c = 0; c < n; c++) CELLS.push([c - (r - (r & 1)) / 2, r]);
+  }
+  const NC = CELLS.length;
+  const IDX = new Map(CELLS.map(([q, r], i) => [q + "," + r, i]));
+  const cellAt = (q, r) => IDX.get(q + "," + r);
+  const pix = (q, r) => [(q + r / 2) * S, r * S * H];
+  const bpix = (q, r) => { const [x, y] = pix(q, r); return [x + PAD, y + PAD]; };
+  const DIRS = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
+
+  const rot = sh => sh.map(([q, r]) => [-r, q + r]);      // 60° im Uhrzeigersinn
+  const norm = sh => sh.map(([q, r]) => [q - sh[0][0], r - sh[0][1]]);
+
+  // ---------- Löser: alle Lösungen der leeren Form einmal aufzählen ----------
+  function orientations(shape) {
+    const out = [], seen = new Set();
+    let s = shape;
+    // nur Drehungen: die Teile lassen sich physisch nicht umdrehen
+    for (let k = 0; k < 6; k++) {
+      const t = [...s].sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+      const n = t.map(([q, r]) => [q - t[0][0], r - t[0][1]]);
+      const key = n.join(";");
+      if (!seen.has(key)) { seen.add(key); out.push(n); }
+      s = rot(s);
+    }
+    return out;
+  }
+  const FULL = (1 << NC) - 1;
+  const byLow = Array.from({ length: NC }, () => []);
+  PIECES.forEach((p, pi) => {
+    const masks = new Set();
+    for (const o of orientations(p.cells)) {
+      for (const [q0, r0] of CELLS) {
+        let m = 0, ok = true;
+        for (const [dq, dr] of o) {
+          const i = cellAt(q0 + dq, r0 + dr);
+          if (i === undefined) { ok = false; break; }
+          m |= 1 << i;
+        }
+        if (ok) masks.add(m);
+      }
+    }
+    for (const m of masks) byLow[31 - Math.clz32(m & -m)].push([pi, m]);
+  });
+  const SOLS = [];
+  (function solve(filled, used, acc) {
+    if (filled === FULL) { SOLS.push(acc.slice()); return; }
+    const free = ~filled & FULL;
+    const low = 31 - Math.clz32(free & -free);
+    for (const [pi, m] of byLow[low]) {
+      if ((used >> pi) & 1 || (m & filled)) continue;
+      acc[pi] = m;
+      solve(filled | m, used | (1 << pi), acc);
+    }
+  })(0, 0, []);
+
+  const maskCells = m => { const a = []; for (let i = 0; i < NC; i++) if ((m >> i) & 1) a.push(i); return a; };
+  const rand = n => Math.floor(Math.random() * n);
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const range = n => Array.from({ length: n }, (_, i) => i);
+
+  function countMatching(test) {
+    let n = 0;
+    for (const s of SOLS) if (test(s) && ++n > 1) break;
+    return n;
+  }
+
+  // Ein Rätsel ist gut, wenn es genau eine Lösung hat.
+  function generate(level) {
+    const L = LEVELS[level];
+    if (L.given) {
+      let last;
+      for (let a = 0; a < 800; a++) {
+        const sol = SOLS[rand(SOLS.length)];
+        const fixed = shuffle(range(NP)).slice(0, L.given);
+        last = { sol, fixed, hints: [] };
+        if (countMatching(s => fixed.every(p => s[p] === sol[p])) === 1) return last;
+      }
+      return last;
+    }
+    for (let k = L.stars; k <= 6; k++) {
+      for (let a = 0; a < 4000; a++) {
+        const sol = SOLS[rand(SOLS.length)];
+        const hints = shuffle(range(NP)).slice(0, k).map(p => {
+          const cs = maskCells(sol[p]);
+          return [p, cs[rand(cs.length)]];
+        });
+        if (countMatching(s => hints.every(([p, c]) => (s[p] >> c) & 1)) === 1) return { sol, fixed: [], hints };
+      }
+    }
+  }
+
+  // ---------- Spielzustand ----------
+  let G = null;           // aktuelles Rätsel
+  let selected = -1;
+  let drag = null;
+  let stats = { starter: 0, junior: 0, expert: 0, wizard: 0 };
+  try { Object.assign(stats, JSON.parse(localStorage.getItem("sternen-legespiel-stats") || "{}")); } catch (e) {}
+  const saveStats = () => { try { localStorage.setItem("sternen-legespiel-stats", JSON.stringify(stats)); } catch (e) {} };
+
+  function randomOrientation(pi) {
+    let s = norm(PIECES[pi].cells);
+    for (let k = rand(6); k > 0; k--) s = rot(s);
+    return norm(s);
+  }
+
+  function newPuzzle(level) {
+    const p = generate(level);
+    G = {
+      level, sol: p.sol, fixed: p.fixed, hints: p.hints,
+      placed: {}, tray: {}, start: Date.now(), end: null, tips: 0, shown: false, done: false,
+    };
+    for (let pi = 0; pi < NP; pi++) if (!G.fixed.includes(pi)) G.tray[pi] = randomOrientation(pi);
+    selected = -1;
+    document.getElementById("board").classList.remove("won");
+    renderAll();
+  }
+
+  const shapeCells = (shape, [q0, r0]) => {
+    const out = [];
+    for (const [dq, dr] of shape) {
+      const i = cellAt(q0 + dq, r0 + dr);
+      if (i === undefined) return null;
+      out.push(i);
+    }
+    return out;
+  };
+
+  function occupancy() {
+    const occ = new Array(NC).fill(-1);
+    for (const pi of G.fixed) for (const c of maskCells(G.sol[pi])) occ[c] = pi;
+    for (const k in G.placed) for (const c of shapeCells(G.placed[k].shape, G.placed[k].origin)) occ[c] = +k;
+    return occ;
+  }
+
+  function canPlace(pi, shape, origin, occ = occupancy()) {
+    const cs = shapeCells(shape, origin);
+    return !!cs && cs.every(c => occ[c] === -1 || occ[c] === pi);
+  }
+
+  const fromCells = cells => {
+    const [q0, r0] = CELLS[cells[0]];
+    return { shape: cells.map(i => [CELLS[i][0] - q0, CELLS[i][1] - r0]), origin: [q0, r0] };
+  };
+
+  // ---------- Zeichnen ----------
+  function starPath(cx, cy, rad) {
+    let d = "";
+    for (let k = 0; k < 12; k++) {
+      const a = (-90 + k * 30) * Math.PI / 180, rr = k % 2 ? rad / Math.sqrt(3) : rad;
+      d += (k ? "L" : "M") + (cx + rr * Math.cos(a)).toFixed(1) + " " + (cy + rr * Math.sin(a)).toFixed(1);
+    }
+    return d + "Z";
+  }
+
+  function pieceSVG(pi, shape, ox, oy, cls = "") {
+    const p = PIECES[pi];
+    const pts = shape.map(([q, r]) => { const [x, y] = pix(q, r); return [x + ox, y + oy]; });
+    let s = `<g class="piece ${cls}" data-pi="${pi}">`;
+    for (let a = 0; a < shape.length; a++) for (let b = a + 1; b < shape.length; b++) {
+      const dq = shape[b][0] - shape[a][0], dr = shape[b][1] - shape[a][1];
+      if (DIRS.some(([x, y]) => x === dq && y === dr))
+        s += `<line data-j="${a}" x1="${pts[a][0]}" y1="${pts[a][1]}" x2="${pts[b][0]}" y2="${pts[b][1]}" stroke="${p.edge}" stroke-width="${S * .3}" stroke-linecap="round"/>`;
+    }
+    pts.forEach(([x, y], j) => {
+      s += `<g data-j="${j}"><path d="${starPath(x, y, R)}" fill="${p.color}" stroke="${p.edge}" stroke-width="2" stroke-linejoin="round"/>` +
+           `<path d="${starPath(x, y, R * .56)}" fill="#ffffff"/>` +
+           (cls.includes("fixed") ? `<circle cx="${x}" cy="${y}" r="4.5" fill="${p.edge}"/>` : "") + `</g>`;
+    });
+    return s + "</g>";
+  }
+
+  const board = document.getElementById("board");
+  board.setAttribute("viewBox", `0 0 ${W} ${HT}`);
+  (function drawStatic() {
+    let s = `<rect class="rim" x="0" y="0" width="${W}" height="${HT}" rx="26"/>`;
+    s += `<rect class="cavity" x="${PAD}" y="${PAD}" width="${6 * S}" height="${3 * S * H}"/>`;
+    for (const [q, r] of CELLS) { const [x, y] = bpix(q, r); s += `<path class="cavity" d="${starPath(x, y, S * .66)}"/>`; }
+    for (const [q, r] of CELLS) { const [x, y] = bpix(q, r); s += `<path class="slot" d="${starPath(x, y, R * .5)}"/>`; }
+    s += `<g id="l-hints"></g><g id="l-pieces"></g><g id="l-ghost" opacity=".5" style="pointer-events:none"></g><g id="l-marks" style="pointer-events:none"></g>`;
+    board.innerHTML = s;
+  })();
+  const L_HINTS = document.getElementById("l-hints");
+  const L_PIECES = document.getElementById("l-pieces");
+  const L_GHOST = document.getElementById("l-ghost");
+  const L_MARKS = document.getElementById("l-marks");
+  const tray = document.getElementById("tray");
+  const floatSvg = document.getElementById("float");
+
+  function renderBoard() {
+    let h = "", m = "";
+    for (const [pi, c] of G.hints) {
+      const [x, y] = bpix(...CELLS[c]), p = PIECES[pi];
+      h += `<path d="${starPath(x, y, R)}" fill="${p.color}" fill-opacity=".55" stroke="${p.color}" stroke-width="2.5"/>`;
+      m += `<circle cx="${x}" cy="${y}" r="7" fill="${p.color}" stroke="#ffffff" stroke-width="2.5"/>`;
+    }
+    L_HINTS.innerHTML = h;
+    L_MARKS.innerHTML = m;
+    let s = "";
+    for (const pi of G.fixed) {
+      const { shape, origin } = fromCells(maskCells(G.sol[pi]));
+      const [ox, oy] = bpix(...origin);
+      s += pieceSVG(pi, shape, ox, oy, "fixed");
+    }
+    for (const k in G.placed) {
+      const { shape, origin } = G.placed[k];
+      const [ox, oy] = bpix(...origin);
+      s += pieceSVG(+k, shape, ox, oy, +k === selected ? "sel" : "");
+    }
+    L_PIECES.innerHTML = s;
+  }
+
+  function boardScale() { const m = board.getScreenCTM(); return m ? m.a : 1; }
+
+  function renderTray() {
+    const k = Math.max(.55, Math.min(.9, boardScale() * .78));
+    tray.innerHTML = "";
+    const ids = Object.keys(G.tray).map(Number);
+    for (const pi of ids) {
+      const shape = G.tray[pi];
+      const pts = shape.map(([q, r]) => pix(q, r));
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+      const m = R + 4;
+      const x0 = Math.min(...xs) - m, y0 = Math.min(...ys) - m;
+      const w = Math.max(...xs) - Math.min(...xs) + 2 * m, h = Math.max(...ys) - Math.min(...ys) + 2 * m;
+      const item = document.createElement("div");
+      item.className = "tray-item" + (pi === selected ? " sel" : "") + (drag && drag.started && drag.pi === pi ? " lifted" : "");
+      item.tabIndex = 0;
+      item.setAttribute("role", "button");
+      item.setAttribute("aria-label", `Teil ${PIECES[pi].name}, ${shape.length} Sterne`);
+      item.dataset.pi = pi;
+      const svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("viewBox", `${x0} ${y0} ${w} ${h}`);
+      svg.setAttribute("width", Math.round(w * k));
+      svg.setAttribute("height", Math.round(h * k));
+      svg.innerHTML = pieceSVG(pi, shape, 0, 0);
+      item.appendChild(svg);
+      tray.appendChild(item);
+    }
+    document.getElementById("tray-count").textContent =
+      ids.length ? `${ids.length} ${ids.length === 1 ? "Teil" : "Teile"} übrig` : "";
+  }
+
+  function renderStatus() {
+    const L = LEVELS[G.level];
+    const missing = NP - G.fixed.length;
+    let t = `<strong>${L.name}</strong> · `;
+    if (G.shown) t += "Lösung angezeigt";
+    else if (G.done) t += "Gelöst!";
+    else if (G.hints.length) t += `${G.hints.length} Farbsterne vorgegeben · alle ${missing} Teile legen`;
+    else t += `${G.fixed.length} Teile vorgegeben · ${missing} Teile legen`;
+    document.getElementById("task").innerHTML = t;
+    document.getElementById("solved").textContent = `Gelöst: ${stats[G.level] || 0}`;
+    document.querySelectorAll(".lvl").forEach(b => b.setAttribute("aria-pressed", b.dataset.level === G.level));
+    const busy = G.done;
+    ["btn-hint", "btn-solve", "btn-reset"].forEach(id => document.getElementById(id).disabled = busy);
+    const canTurn = selected >= 0 && !busy;
+    document.getElementById("btn-rot").disabled = !canTurn;
+    tickTimer();
+  }
+
+  function renderAll() { renderBoard(); renderTray(); renderStatus(); }
+
+  function fmt(ms) { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+  function tickTimer() { if (G) document.getElementById("timer").textContent = fmt((G.end || Date.now()) - G.start); }
+  setInterval(tickTimer, 1000);
+
+  // ---------- Drehen ----------
+  function transformPiece(pi, fn) {
+    if (pi < 0 || G.done) return;
+    if (drag && drag.started && drag.pi === pi) {
+      drag.shape = fn(drag.shape);      // dreht um den gegriffenen Stern
+      drawFloat(); updateDrag(drag.lastX, drag.lastY);
+      return;
+    }
+    if (G.placed[pi]) {
+      const { shape, origin } = G.placed[pi];
+      // um den Stern drehen, der am nächsten am Schwerpunkt liegt
+      const cq = shape.reduce((a, c) => a + c[0], 0) / shape.length, cr = shape.reduce((a, c) => a + c[1], 0) / shape.length;
+      let j = 0, best = 1e9;
+      shape.forEach(([q, r], i) => { const [x, y] = pix(q - cq, r - cr), d = x * x + y * y; if (d < best) { best = d; j = i; } });
+      const ns = fn(shape);
+      const no = [origin[0] + shape[j][0] - ns[j][0], origin[1] + shape[j][1] - ns[j][1]];
+      if (canPlace(pi, ns, no)) G.placed[pi] = { shape: ns, origin: no };
+      else { delete G.placed[pi]; G.tray[pi] = norm(ns); }
+    } else if (G.tray[pi]) {
+      G.tray[pi] = norm(fn(G.tray[pi]));
+    }
+    renderAll();
+  }
+
+  // ---------- Ziehen ----------
+  function onDown(e) {
+    if (e.button > 0 || !G || G.done || drag) return;
+    const el = e.target.closest("[data-pi]");
+    if (!el) return;
+    const pi = +el.dataset.pi;
+    if (G.fixed.includes(pi)) return;
+    const jEl = e.target.closest("[data-j]");
+    e.preventDefault();
+    drag = {
+      pi, j: jEl ? +jEl.dataset.j : 0, from: G.placed[pi] ? "board" : "tray",
+      x0: e.clientX, y0: e.clientY, lastX: e.clientX, lastY: e.clientY,
+      started: false, touch: e.pointerType === "touch", snap: null, shape: null,
+    };
+  }
+
+  function startDrag() {
+    drag.started = true;
+    selected = drag.pi;
+    if (drag.from === "board") {
+      drag.shape = G.placed[drag.pi].shape;
+      delete G.placed[drag.pi];
+    } else {
+      drag.shape = G.tray[drag.pi];
+    }
+    drag.k = boardScale();
+    renderBoard(); renderTray(); renderStatus();
+    drawFloat();
+  }
+
+  function drawFloat() {
+    const [jx, jy] = pix(...drag.shape[drag.j]);
+    floatSvg.innerHTML = `<g id="float-g">${pieceSVG(drag.pi, drag.shape, -jx, -jy)}</g>`;
+    drag.g = floatSvg.firstChild;
+  }
+
+  function hexRound(q, r) {
+    const x = q, z = r, y = -x - z;
+    let rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+    const dx = Math.abs(rx - x), dy = Math.abs(ry - y), dz = Math.abs(rz - z);
+    if (dx > dy && dx > dz) rx = -ry - rz; else if (dy <= dz) rz = -rx - ry;
+    return [rx, rz];
+  }
+
+  function updateDrag(cx, cy) {
+    const gx = cx, gy = cy - (drag.touch ? S * drag.k * .9 : 0);
+    drag.g.setAttribute("transform", `translate(${gx} ${gy}) scale(${drag.k})`);
+    const m = board.getScreenCTM();
+    drag.snap = null;
+    if (m) {
+      const p = new DOMPoint(gx, gy).matrixTransform(m.inverse());
+      const fr = (p.y - PAD) / (S * H), fq = (p.x - PAD) / S - fr / 2;
+      const [q, r] = hexRound(fq, fr);
+      const [bx, by] = bpix(q, r);
+      if (Math.hypot(bx - p.x, by - p.y) < S * .75) {
+        const origin = [q - drag.shape[drag.j][0], r - drag.shape[drag.j][1]];
+        if (canPlace(drag.pi, drag.shape, origin)) drag.snap = origin;
+      }
+    }
+    if (drag.snap) {
+      const [ox, oy] = bpix(...drag.snap);
+      L_GHOST.innerHTML = pieceSVG(drag.pi, drag.shape, ox, oy);
+    } else L_GHOST.innerHTML = "";
+  }
+
+  function onMove(e) {
+    if (!drag) return;
+    drag.lastX = e.clientX; drag.lastY = e.clientY;
+    if (!drag.started) {
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
+      startDrag();
+    }
+    e.preventDefault();
+    updateDrag(e.clientX, e.clientY);
+  }
+
+  function onUp() {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (!d.started) {           // Antippen
+      if (selected === d.pi) transformPiece(d.pi, rot);
+      else { selected = d.pi; renderAll(); }
+      return;
+    }
+    floatSvg.innerHTML = "";
+    L_GHOST.innerHTML = "";
+    if (d.snap) {
+      G.placed[d.pi] = { shape: d.shape, origin: d.snap };
+      delete G.tray[d.pi];
+    } else {
+      G.tray[d.pi] = norm(d.shape);
+    }
+    renderAll();
+    checkWin();
+  }
+
+  function cancelDrag() {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (!d.started) return;
+    floatSvg.innerHTML = ""; L_GHOST.innerHTML = "";
+    G.tray[d.pi] = norm(d.shape);
+    renderAll();
+  }
+
+  board.addEventListener("pointerdown", onDown);
+  tray.addEventListener("pointerdown", onDown);
+  window.addEventListener("pointermove", onMove, { passive: false });
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", cancelDrag);
+  window.addEventListener("wheel", e => {
+    if (drag && drag.started) { e.preventDefault(); transformPiece(drag.pi, e.deltaY < 0 ? sh => rot(rot(rot(rot(rot(sh))))) : rot); }
+  }, { passive: false });
+
+  tray.addEventListener("keydown", e => {
+    const el = e.target.closest("[data-pi]");
+    if (el && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      const pi = +el.dataset.pi;
+      if (selected === pi) transformPiece(pi, rot); else { selected = pi; renderAll(); }
+      const again = tray.querySelector(`[data-pi="${pi}"]`); if (again) again.focus();
+    }
+  });
+  window.addEventListener("keydown", e => {
+    if (e.target.closest && e.target.closest("button, input")) return;
+    const key = e.key.toLowerCase();
+    const pi = drag && drag.started ? drag.pi : selected;
+    if (key === "r") { transformPiece(pi, rot); refocus(pi); }
+    else if (key === "escape") cancelDrag();
+  });
+  function refocus(pi) { if (!drag) { const el = tray.querySelector(`[data-pi="${pi}"]`); if (el) el.focus(); } }
+
+  // ---------- Prüfen, Tipp, Lösung ----------
+  function checkWin() {
+    if (G.done) return;
+    if (G.fixed.length + Object.keys(G.placed).length < NP) return;
+    const occ = occupancy();
+    if (occ.some(v => v < 0)) return;
+    if (!G.hints.every(([pi, c]) => occ[c] === pi)) return;
+    G.done = true; G.end = Date.now(); selected = -1;
+    if (!G.shown) { stats[G.level] = (stats[G.level] || 0) + 1; saveStats(); }
+    renderAll();
+    if (G.shown) return;
+    board.classList.add("won");
+    document.getElementById("win-text").textContent =
+      `${LEVELS[G.level].name}-Rätsel gelöst in ${fmt(G.end - G.start)}` +
+      (G.tips ? ` mit ${G.tips} ${G.tips === 1 ? "Tipp" : "Tipps"}.` : " – ganz ohne Tipp.");
+    document.getElementById("win").hidden = false;
+    document.getElementById("win-next").focus();
+  }
+
+  function placeFromSolution(pi) {
+    const cells = maskCells(G.sol[pi]);
+    for (const k in G.placed) {
+      if (+k === pi) continue;
+      const cs = shapeCells(G.placed[k].shape, G.placed[k].origin);
+      if (cs.some(c => cells.includes(c))) { G.tray[k] = norm(G.placed[k].shape); delete G.placed[k]; }
+    }
+    G.placed[pi] = fromCells(cells);
+    delete G.tray[pi];
+  }
+
+  function isCorrect(pi) {
+    const p = G.placed[pi];
+    if (!p) return false;
+    return shapeCells(p.shape, p.origin).reduce((m, c) => m | (1 << c), 0) === G.sol[pi];
+  }
+
+  document.getElementById("btn-hint").addEventListener("click", () => {
+    if (G.done) return;
+    const open = range(NP).filter(pi => !G.fixed.includes(pi) && !isCorrect(pi));
+    if (!open.length) return;
+    // bevorzugt ein Teil, das noch in der Ablage liegt
+    const inTray = open.filter(pi => G.tray[pi]);
+    const pi = (inTray.length ? inTray : open)[rand((inTray.length ? inTray : open).length)];
+    placeFromSolution(pi);
+    G.tips++;
+    selected = -1;
+    renderAll();
+    checkWin();
+  });
+
+  document.getElementById("btn-solve").addEventListener("click", () => {
+    if (G.done) return;
+    G.shown = true;
+    for (let pi = 0; pi < NP; pi++) if (!G.fixed.includes(pi)) placeFromSolution(pi);
+    selected = -1;
+    checkWin();
+  });
+
+  document.getElementById("btn-reset").addEventListener("click", () => {
+    if (G.done) return;
+    for (const k in G.placed) G.tray[k] = norm(G.placed[k].shape);
+    G.placed = {};
+    selected = -1;
+    renderAll();
+  });
+
+  document.getElementById("btn-rot").addEventListener("click", () => { transformPiece(selected, rot); });
+  document.getElementById("btn-new").addEventListener("click", () => newPuzzle(G.level));
+  document.querySelectorAll(".lvl").forEach(b => b.addEventListener("click", () => {
+    try { localStorage.setItem("sternen-legespiel-level", b.dataset.level); } catch (e) {}
+    newPuzzle(b.dataset.level);
+  }));
+  const closeWin = () => { document.getElementById("win").hidden = true; };
+  document.getElementById("win-close").addEventListener("click", closeWin);
+  document.getElementById("win-next").addEventListener("click", () => { closeWin(); newPuzzle(G.level); });
+  document.getElementById("win").addEventListener("click", e => { if (e.target.id === "win") closeWin(); });
+
+  let resizeT;
+  window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => G && renderTray(), 120); });
+
+  // ---------- Start (mit Zustand über Aktualisierungen hinweg) ----------
+  try { window.claude?.hot?.snapshot?.(() => ({ G })); } catch (e) {}
+
+  function start(data) {
+    if (data && data.G && data.G.sol) {
+      G = data.G;
+      renderAll();
+      return;
+    }
+    let level = "starter";
+    try { const l = localStorage.getItem("sternen-legespiel-level"); if (LEVELS[l]) level = l; } catch (e) {}
+    newPuzzle(level);
+  }
+  const hot = window.claude?.hot;
+  if (hot?.ready) hot.ready(start); else start(hot?.data ?? {});
+})();
+</script>
+</body>
+</html>
